@@ -1,0 +1,313 @@
+[config]
+# Your license key (mandatory). Must not be empty.
+LICENSE_KEY = ""
+
+# The main RPC URL for Solana interactions. Use a high-performance private RPC for best results.
+RPC_URL = "https://api.mainnet-beta.solana.com"
+
+# Stream transport mode: "grpc" (Yellowstone gRPC) or "ws" (WebSocket RPC pub/sub).
+# gRPC is faster and more reliable; WS is a fallback if gRPC is unavailable.
+STREAM_TRANSPORT = "grpc"
+
+# The gRPC Geyser URL for streaming real-time account/transaction updates.
+# Required when STREAM_TRANSPORT = "grpc".
+GRPC_URL = "https://solana-yellowstone-grpc.publicnode.com:443"
+
+# Token for authenticating with the gRPC endpoint (if required). Leave empty if not needed.
+GRPC_TOKEN = ""
+
+# WebSocket RPC endpoint for real-time updates.
+# Required when STREAM_TRANSPORT = "ws".
+WS_URL = ""
+
+# The wallet private key (Base58 encoded) used for signing transactions.
+# Keep this secret.
+WALLET_PRIVATE_KEY_B58 = ""
+
+# Preferred region for SWQoS providers. Valid values: NewYork, Frankfurt, Amsterdam, SLC, Tokyo, London, LosAngeles, Default
+PREFERRED_REGION = "NewYork"
+
+# The public key of a Durable Nonce account, used to ensure transaction validity over time.
+# Leave empty if not using durable nonces.
+DURABLE_NONCE_PUBKEY = ""
+
+# Enable saving logs to .logs/solana-trading-bot.log file (default: true).
+SAVE_LOGS = true
+
+
+[trading]
+# === Core Trading Parameters ===
+
+# The fixed amount of SOL to spend on each initial buy order.
+BUY_AMOUNT_SOL = 0.1
+
+# The priority fee (in SOL) added to transactions to encourage faster inclusion by validators.
+# Higher values increase transaction priority but cost more.
+PRIORITY_FEE_SOL = 0.000011
+
+# The bribe amount (in SOL) sent to SWQoS (Jito, Nozomi or Astralane) for faster inclusion.
+# Used for MEV protection and faster execution.
+BRIBE_SOL = 0.0011
+
+# The maximum allowed slippage for buy orders (as a percentage, e.g., 10 = 10%).
+# Higher values allow larger price movements but increase execution risk.
+BUY_SLIPPAGE_PERCENT = 10
+
+# The maximum allowed slippage for sell orders (as a percentage, e.g., 30 = 30%).
+# Higher values help ensure exits complete even in volatile conditions.
+SELL_SLIPPAGE_PERCENT = 30
+
+# The maximum number of concurrent open positions allowed.
+# Set to 0 to disable position limits (not recommended).
+MAX_POSITIONS = 1
+
+# Hard stop loss percentage (must be negative, e.g., -12 means sell if PnL drops below -12%).
+# Must be between -100 and 0. Triggers an immediate exit when breached.
+STOP_LOSS = -12
+
+# Take profit levels: defined as { target_pnl_percent = X, sell_percent = Y }.
+# When PnL reaches X%, sell Y% of the remaining position.
+# sell_percent must be between 1 and 100.
+TAKE_PROFIT_LEVELS = [
+  { target_pnl_percent = 10, sell_percent = 50 },
+  { target_pnl_percent = 50, sell_percent = 50 },
+  { target_pnl_percent = 100, sell_percent = 100 }
+]
+
+# Dynamic Trailing Stop Loss (DTSL) levels.
+# As PnL increases, the stop loss floor is raised to lock in profits.
+# Format: { target_pnl_percent = X, floor_pnl_percent = Y, sell_percent = Z, timer_seconds = T }
+# - target_pnl_percent: When PnL reaches this level, the floor is activated
+# - floor_pnl_percent: The minimum PnL floor (must be < target_pnl_percent)
+# - sell_percent: Percentage of position to sell (1-100)
+# - timer_seconds: Optional. If set, requires PnL to stay above floor for this duration before selling
+# Empty list disables DTSL.
+DTSL_LEVELS = [
+  { target_pnl_percent = 10,  floor_pnl_percent = -5,   sell_percent = 100, timer_seconds = 180 },
+  { target_pnl_percent = 25,  floor_pnl_percent = 10,   sell_percent = 100, timer_seconds = 120 },
+  { target_pnl_percent = 50,  floor_pnl_percent = 25,   sell_percent = 100, timer_seconds = 60 },
+  { target_pnl_percent = 75,  floor_pnl_percent = 50,   sell_percent = 100, timer_seconds = 30 }
+]
+
+
+# === Time-Based Exit Rules ===
+
+# Force exit if a position is held longer than MAX_HOLD_TIME_SECONDS.
+# When enabled, positions are closed after the specified duration regardless of PnL.
+ENABLE_MAX_HOLD_TIME = false
+MAX_HOLD_TIME_SECONDS = 300
+
+# Force exit if PnL remains negative for NEGATIVE_PNL_TIMER_SECONDS.
+# When enabled, positions with negative PnL are closed after the timer expires.
+ENABLE_NEGATIVE_PNL_TIMER = true
+NEGATIVE_PNL_TIMER_SECONDS = 300
+
+# Force exit if PnL is above a minimum target for a set duration.
+# When enabled, positions are closed after maintaining the target profit for the specified time.
+ENABLE_MIN_PROFIT_TARGET = true
+MIN_PROFIT_TARGET_PNL_PERCENT = 5
+MIN_PROFIT_TARGET_SECONDS = 30
+
+
+# === Simulation and Re-entry Controls ===
+
+# Run in simulation mode (paper trading) if true. No real SOL is spent.
+SIMULATE = false
+
+# When true, allows re-entering mints that already closed out (requires new signal).
+# Set to false to prevent re-entry after a position closes.
+ALLOW_REENTER = false
+
+# When true (requires ALLOW_REENTER=true), closed positions stay in watchlist and
+# can be re-entered automatically when dip/flow conditions are favorable.
+ENABLE_SCALPING = false
+
+
+# === Copytrade Settings ===
+
+# Wallets to follow; the bot only reacts to buys from these addresses.
+# If empty, copytrade signals will never fire. Add wallet public keys as strings.
+TARGET_WALLETS = [
+  "BX1Zfq5hDy4nj9GimSoKBHAEdE15vQQUuCv48vp4fpXv",
+]
+
+# When true, scale our buy size based on the observed target wallet's buy size.
+# When false, always use BUY_AMOUNT_SOL regardless of target's trade size.
+FOLLOW_TARGET_BUY_SIZE = false
+
+# Percentage of the observed target buy size to copy (0-100).
+# Applied before exposure caps. 50 = half their notional size, 100 = match their size.
+SCALE_TARGET_BUY_SIZE = 60.0
+
+# When true, a target buy only "primes" the mint and we still require dip/flow gates before entering.
+# When false, we buy immediately once risk checks pass (more aggressive).
+ENABLE_ENTRY_DIP = false
+
+# Require the target's trade to show X% profit within Y seconds before we enter.
+# When enabled, we wait to see the target's position become profitable before copying.
+WAIT_FOR_MONITORED_PROFIT = false
+MONITORED_PNL_PERCENT = 10.0
+MONITORED_PNL_TIMEOUT_SEC = 30
+
+# Ensure the target still holds the mint for at least this long before entering.
+# When enabled, we verify the target hasn't sold before copying their buy.
+CONFIRM_TARGET_STILL_HOLDS = false
+CONFIRM_TARGET_STILL_HOLDS_TIMEOUT_SEC = 30
+
+# Skip copy entries if the target already held the mint prior to this buy.
+# When enabled, only copy trades for mints the target just opened (new positions only).
+COPY_ONLY_NEW_POSITIONS = false
+
+# Mirror target sell events for active positions.
+# When enabled, automatically sell when the target wallet sells (proportional or full exit based on MATCH_TARGET_SELL_SIZING).
+FOLLOW_TARGET_SELLS = false
+
+# When mirroring sells, match the same percentage instead of always exiting 100%.
+# When true, if target sells 50% of their position, we sell 50% of ours.
+# When false, we always sell 100% when target sells any amount.
+MATCH_TARGET_SELL_SIZING = true
+
+
+# === Scalper / DCA Settings ===
+# Requires ENABLE_SCALPING = true.
+
+# Enable DCA (Dollar Cost Averaging) behavior.
+# When false, all DCA functionality is disabled regardless of other DCA settings.
+ENABLE_DCA = true
+
+# Minimum interest score required to enter a trade (derived from volume, flow, dip).
+# Higher values filter out lower-quality opportunities. Set to 0.0 to disable scoring filter.
+ENTRY_INTEREST_SCORE_MIN = 0.0
+
+# Cooldown (in seconds) between buy attempts for the same mint.
+# Prevents rapid re-entry on the same token. Lower values allow more frequent entries.
+BUY_THROTTLE_SECS = 1
+
+# Maximum portfolio exposure allowed as a percentage of total equity (0-100).
+# Limits total capital deployed across all positions. Higher values allow more aggressive positioning.
+# Set high (90%) here to allow room for DCA adds within the single position limit.
+MAX_EXPOSURE_PCT = 90.0
+
+# Maximum number of DCA (Dollar Cost Averaging) buys allowed per position.
+# Each DCA buy adds to a losing position to average down entry price. Set to 0 to disable DCA.
+DCA_MAX = 1
+
+# Cooldown (in seconds) between DCA buys.
+# Must be > 0 when DCA_MAX > 0. Prevents too-frequent DCA adds.
+DCA_COOLDOWN_SECS = 15
+
+# Decay factor applied to each subsequent DCA size (0.1-1.0).
+# Each DCA buy is `previous_size * DCA_DECAY`. 0.7 means each add is 70% of the previous.
+DCA_DECAY = 0.7
+
+# Enable simple loss-timer DCA: when underwater by threshold for X seconds, trigger DCA.
+# When enabled, DCA is triggered if position stays below the threshold for the timer duration.
+DCA_ENABLE_LOSS_TIMER = true
+DCA_LOSS_TIMER_SECONDS = 6
+DCA_LOSS_TRIGGER_UNDERWATER_PCT = 10.0
+
+
+# === Execution Reliability ===
+
+# Number of retries for failed transactions.
+# Must be at least 1. Higher values improve reliability but may delay exits.
+RETRY_MAX_ATTEMPTS = 3
+
+# Base delay (milliseconds) between retries. Uses exponential backoff.
+# Must be at least 1. Higher values reduce network load but slow recovery.
+RETRY_BACKOFF_MS = 500
+
+# Error messages that trigger a retry. Case-insensitive substring matching.
+# Common values: "Slippage", "Exceeded", "Too much SOL"
+RETRY_ON_ERRORS = ["Slippage", "Exceeded", "Too much SOL"]
+
+# Extra slippage applied (in basis points, 100 bps = 1%) on the final sell retry to ensure exit.
+# Helps punch through stuck pools. Maximum 10000 bps (100%). Default: 1000 bps (10%).
+RETRY_SELL_SLIPPAGE_BOOST_BPS = 1000
+
+# Mints to never trade (rugs, honeypots, etc.).
+# Add token mint addresses as strings to permanently blacklist them.
+BLACKLISTED_MINTS = [
+  "2T1FZvs9TEp88bXKhHoRn6sXqufa8Ky6VKB4iMJnpump",
+  "GehozGoGdiiqkE3NRSqFCWUB5y3N2JoHZVTRsEcupump",
+  "no22fk86sYbcPVszwrFq4DhG8HHf4h49W1ifgQTpump"
+]
+
+
+[scoring]
+# === Interest Score Filters ===
+
+# Minimum trades required in the last 30s window.
+# Higher values filter out low-activity tokens. Helps avoid dead coins.
+MIN_TRADES_30S = 15
+
+# Minimum volume (in SOL) required in various time windows.
+# Higher values ensure sufficient liquidity before entering.
+MIN_VOL_5S_SOL = 0.1
+MIN_VOL_2M_SOL = 1.0
+MIN_VOL_5M_SOL = 5.0
+MIN_VOL_15M_SOL = 0.0
+MIN_VOL_30M_SOL = 0.0
+
+# Minimum trades required in longer windows (5m filter helps avoid dead coins).
+MIN_TRADES_5M = 10
+MIN_TRADES_15M = 0
+MIN_TRADES_30M = 0
+
+# Maximum allowed data staleness (seconds).
+# Rejects entries if the most recent trade data is older than this threshold.
+MAX_FRESHNESS_SECS = 1
+
+# Global drawdown filter: Do not enter if price is >X% down from all-time high (prevents buying dead bounces).
+# Set to 0.0 to disable. Higher values are more restrictive.
+MAX_GLOBAL_DRAWDOWN_PCT = 70.0
+
+
+# === Entry Gates ===
+
+# Required dip range (from local high) to consider entry.
+# Only enters when the current price is between these percentages below the recent high.
+ENTRY_DIP_MIN_PCT = 8.0
+ENTRY_DIP_MAX_PCT = 25.0
+
+# Minimum buy share (0.0-1.0) required to enter.
+# 0.4 = 40% of recent volume must be buys. Higher values require stronger buy pressure.
+MIN_BUY_SHARE_FOR_ENTRY = 0.4
+
+
+# === Entry Dip Weights ===
+
+# Defines how the "entry dip" is calculated by weighting different timeframes.
+# Each weight is 0.0-1.0. Weights don't need to sum to 1.0, but if all are zero, defaults to 15s-only.
+# Heavy weight on shorter timeframes (5s, 15s) for scalping volatility.
+ENTRY_DIP_WEIGHT_1S  = 0.0
+ENTRY_DIP_WEIGHT_5S  = 0.20
+ENTRY_DIP_WEIGHT_15S = 0.40
+ENTRY_DIP_WEIGHT_30S = 0.20
+ENTRY_DIP_WEIGHT_2M  = 0.10
+ENTRY_DIP_WEIGHT_5M  = 0.10
+ENTRY_DIP_WEIGHT_15M = 0.0
+ENTRY_DIP_WEIGHT_30M = 0.0
+
+# Rug Protection: If 5m return drops more than X%, interest score is nuked.
+# Prevents entering tokens that are rapidly declining. Higher values are more permissive.
+RUGGED_5M_RETURN_MAX_DROP_PCT = 25.0
+
+
+# === Entry Rebound Confirmation ===
+
+# Require price/flow recovery before entering (anti-knife-catch protection).
+# When enabled, waits for a price bounce and buy flow recovery before entering.
+ENTRY_ENABLE_REBOUND_CONFIRMATION = false
+
+# Max age (seconds) of the dip low to consider for rebound.
+# Only considers rebounds if the low point occurred within this window.
+ENTRY_REBOUND_MAX_AGE_SECS = 5
+
+# Required short-term price bounce (percentage) after the dip.
+# The price must recover by at least this amount before entry is allowed.
+ENTRY_REBOUND_MIN_SHORT_UP_PCT = 0.2
+
+# Required buy share (0.0-1.0) during the bounce.
+# The recovery must show at least this percentage of buy volume.
+ENTRY_REBOUND_MIN_BUY_SHARE_SHORT = 0.6
