@@ -15,6 +15,166 @@ NONCE_FILE=".durable_nonce.json"
 NONCE_SCRIPT="setup_nonce.sh"
 BINARY_NAME="shredcore-copytrade-bot"
 
+# GitHub repository URL for auto-updates (set this for public releases)
+REPO_URL="https://github.com/Shredcore-Blockchain-Tools/solana-copytrade-bot.git"
+
+# ============================================================================
+# Git Auto-Update System
+# ============================================================================
+
+# Ensure git is installed, install if missing
+ensure_git() {
+    if command -v git &>/dev/null; then
+        return 0
+    fi
+    
+    echo ""
+    echo "Git is not installed. Installing git..."
+    
+    # Detect package manager and install git
+    if command -v apt-get &>/dev/null; then
+        sudo apt-get update -qq && sudo apt-get install -y -qq git
+    elif command -v yum &>/dev/null; then
+        sudo yum install -y -q git
+    elif command -v dnf &>/dev/null; then
+        sudo dnf install -y -q git
+    elif command -v pacman &>/dev/null; then
+        sudo pacman -S --noconfirm git
+    elif command -v apk &>/dev/null; then
+        sudo apk add --quiet git
+    elif command -v brew &>/dev/null; then
+        brew install git
+    else
+        echo "ERROR: Could not detect package manager to install git." >&2
+        echo "Please install git manually and run this script again." >&2
+        return 1
+    fi
+    
+    if command -v git &>/dev/null; then
+        echo "Git installed successfully."
+        return 0
+    else
+        echo "ERROR: Git installation failed." >&2
+        return 1
+    fi
+}
+
+# Setup git repository if downloaded via zip (no .git folder)
+setup_git_repo() {
+    # Skip if already a git repo
+    if [[ -d ".git" ]]; then
+        return 0
+    fi
+    
+    # Skip if no repo URL configured
+    if [[ -z "${REPO_URL:-}" ]]; then
+        return 0
+    fi
+    
+    echo ""
+    echo "Initializing git repository for auto-updates..."
+    
+    # Initialize git repo
+    git init -q
+    
+    # Add origin remote
+    git remote add origin "$REPO_URL"
+    
+    # Fetch from remote
+    if ! git fetch origin main 2>/dev/null; then
+        if ! git fetch origin master 2>/dev/null; then
+            echo "Warning: Could not fetch from remote. Auto-updates may not work."
+            return 0
+        fi
+        git checkout -b main origin/master 2>/dev/null || true
+    else
+        git checkout -b main origin/main 2>/dev/null || true
+    fi
+    
+    # Reset to match remote (preserves local files not in repo)
+    git reset --mixed origin/main 2>/dev/null || git reset --mixed origin/master 2>/dev/null || true
+    
+    echo "Git repository initialized."
+}
+
+# Auto-update from git repository
+auto_update() {
+    # Skip if no repo URL configured
+    if [[ -z "${REPO_URL:-}" ]]; then
+        return 0
+    fi
+    
+    # Ensure git is available
+    if ! ensure_git; then
+        echo "Warning: Cannot check for updates without git."
+        return 0
+    fi
+    
+    # Setup git repo if needed (for zip downloads)
+    setup_git_repo
+    
+    # Skip if still not a git repo
+    if [[ ! -d ".git" ]]; then
+        return 0
+    fi
+    
+    echo ""
+    echo "=== Checking for updates ==="
+    
+    # Fetch latest changes
+    if ! git fetch origin 2>/dev/null; then
+        echo "Warning: Could not fetch updates. Continuing with current version."
+        return 0
+    fi
+    
+    # Get current branch
+    local current_branch
+    current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
+    
+    # Check if remote branch exists
+    if ! git rev-parse "origin/${current_branch}" &>/dev/null; then
+        echo "Warning: Remote branch origin/${current_branch} not found."
+        return 0
+    fi
+    
+    # Check if there are updates
+    local local_commit remote_commit
+    local_commit=$(git rev-parse HEAD 2>/dev/null || echo "")
+    remote_commit=$(git rev-parse "origin/${current_branch}" 2>/dev/null || echo "")
+    
+    if [[ -z "$local_commit" ]] || [[ -z "$remote_commit" ]]; then
+        echo "Warning: Could not determine commit status."
+        return 0
+    fi
+    
+    if [[ "$local_commit" == "$remote_commit" ]]; then
+        echo "Bot is up to date."
+        return 0
+    fi
+    
+    echo "Updates available. Updating..."
+    
+    # Pull updates
+    if git pull origin "$current_branch" 2>/dev/null; then
+        echo ""
+        echo "=== Update successful! ==="
+        
+        # Show recent changes
+        echo ""
+        echo "Recent changes:"
+        echo "----------------------------------------"
+        git log --oneline "${local_commit}..HEAD" 2>/dev/null | head -3
+        echo "----------------------------------------"
+        
+        # Ensure binaries and scripts are executable
+        chmod +x "$BINARY_NAME" 2>/dev/null || true
+        chmod +x "$0" 2>/dev/null || true
+        chmod +x "$NONCE_SCRIPT" 2>/dev/null || true
+    else
+        echo "Warning: Update failed. Continuing with current version."
+    fi
+}
+
 # ============================================================================
 # TOML Editing Helpers
 # ============================================================================
@@ -289,6 +449,9 @@ main() {
     echo "========================================"
     echo "  shredcore-copytrade-bot Start Script"
     echo "========================================"
+    
+    # Auto-update from git repository
+    auto_update
     
     # Check if config.toml exists
     if [[ -f "$CONFIG_FILE" ]]; then
